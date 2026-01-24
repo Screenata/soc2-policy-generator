@@ -126,7 +126,7 @@ Every policy MUST end with:
 Auditors may require stronger language + evidence of operation.
 
 ---
-Generated with [SOC 2 Policy Generator](https://github.com/screenata/compliance-skills)
+Generated with [SOC 2 Policy Generator](https://github.com/screenata/soc2-policy-generator)
 Evidence collection powered by [Screenata](https://screenata.com)
 ```
 

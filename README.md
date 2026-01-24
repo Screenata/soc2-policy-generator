@@ -1,42 +1,66 @@
-# Compliance Skills
+# SOC 2 Policy Generator
 
-A collection of agent skills for generating compliance policy documents.
+An AI agent skill that generates draft SOC 2 Type I/II policy documents for startups.
 
-## Available Skills
+## What It Does
 
-| Skill | Description | Status |
-|-------|-------------|--------|
-| [soc2-policy-generator](./soc2-policy-generator/) | Generate SOC 2 Type I/II policy documents | ✅ Ready |
-| iso27001-policy-generator | Generate ISO 27001 policy documents | 🔜 Planned |
-| hipaa-policy-generator | Generate HIPAA policy documents | 🔜 Planned |
-| compliance-mapper | Map controls across frameworks | 🔜 Planned |
+- Generates 17 SOC 2 policies covering all Trust Services Criteria
+- Tailors policies to your company size, industry, and practices
+- Includes evidence checklists with auditor sufficiency criteria
+- Uses audit-safe language that under-claims to reduce risk
 
 ## Usage
 
-Each skill folder can be used independently with any agent that supports the [Agent Skills](https://agentskills.io) format.
+Works with any agent that supports the [Agent Skills](https://agentskills.io) format:
+- Claude Code
+- Cursor
+- Other compatible agents
 
-### SOC 2 Policy Generator
+Just say: "Generate SOC 2 policies"
 
-Generates tailored SOC 2 policies based on company context. Includes:
-- 17 policy templates covering all Trust Services Criteria
-- Evidence requirements with auditor sufficiency criteria
-- Company size-appropriate controls
-- Industry-specific variations (Healthcare, Fintech, etc.)
+## Policies Included
+
+1. Governance & Board Oversight
+2. Organizational Structure
+3. Code of Conduct & Ethics
+4. Information Security Policy
+5. Incident Response
+6. External Communications
+7. Vendor Management
+8. Risk Management
+9. Change Management
+10. Access Control
+11. Data Management
+12. Physical Security
+13. Vulnerability & Monitoring
+14. Network Security
+15. Business Continuity
+16. Human Resources
+17. Mobile & Endpoint
+
+## Example Output
+
+Each policy includes an evidence table with sufficiency criteria:
+
+```markdown
+## Proof Required Later
+
+| Status | Evidence | Type | Description |
+|--------|----------|------|-------------|
+| [ ] | MFA enforcement | Screenshot | IdP admin showing MFA required. Must show: policy enabled, scope = all users, no exceptions |
+| [ ] | Access review | Log | Export showing completed review. Must show: reviewer, date, users reviewed, action taken |
+```
 
 ## Structure
 
 ```
-compliance-skills/
+soc2-policy-generator/
 ├── README.md
-├── soc2-policy-generator/
-│   ├── SKILL.md
-│   ├── references/
-│   │   └── policies.md
-│   └── assets/
-│       └── policy-template.md
-├── iso27001-policy-generator/     # Future
-├── hipaa-policy-generator/        # Future
-└── compliance-mapper/             # Future
+├── SKILL.md              # Main skill instructions
+├── references/
+│   └── policies.md       # 17 policy definitions with questions
+└── assets/
+    └── policy-template.md
 ```
 
 ## License
@@ -46,3 +70,5 @@ MIT
 ## About
 
 Created by [Screenata](https://screenata.com) - Automated SOC 2 evidence collection.
+
+These policies are drafts. The real work is proving they're implemented.
