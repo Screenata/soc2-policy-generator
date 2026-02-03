@@ -105,7 +105,29 @@ This policy is available to all [relevant personnel].
 - [e.g., "Employees have company-issued devices"]
 ```
 
-### 8. Proof Required Later
+### 8. Evidence from Codebase (if scanning was performed)
+
+Include this section when codebase scanning detected relevant patterns. Place it BEFORE "Proof Required Later".
+
+```markdown
+## Evidence from Codebase
+
+The following security patterns were detected in the codebase:
+
+| File | Line | Pattern | Description |
+|------|------|---------|-------------|
+| src/middleware/auth.ts | 15 | JWT validation | `jwt.verify(token, secret)` |
+| infrastructure/rds.tf | 42 | Encryption | `storage_encrypted = true` |
+| .github/workflows/ci.yml | - | CI/CD | GitHub Actions pipeline configured |
+
+*Evidence detected during codebase scan. Verify implementations before audit submission.*
+```
+
+**Important**: Reference these findings in the Policy Procedures section where relevant:
+- "Authentication is enforced via JWT validation middleware (see `src/middleware/auth.ts:15`)"
+- "Data at rest is encrypted using AWS KMS (see `infrastructure/rds.tf:42`)"
+
+### 9. Proof Required Later
 
 Use a table format with a Status checkbox column and evidence types. Valid types:
 - **Screenshot**: Single UI screenshot capture
@@ -124,7 +146,7 @@ Use a table format with a Status checkbox column and evidence types. Valid types
 | [ ] | Termination checklist | Policy | Signed checklist template used for offboarding. Must show: access revocation items, equipment return, signatures/dates |
 ```
 
-### 9. References
+### 10. References
 
 ```markdown
 ## References
@@ -133,7 +155,7 @@ Use a table format with a Status checkbox column and evidence types. Valid types
 - [Another Related Policy] Policy
 ```
 
-### 10. Required Footer
+### 11. Required Footer
 
 ```markdown
 ---

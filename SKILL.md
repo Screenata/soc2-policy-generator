@@ -1,15 +1,15 @@
 ---
 name: soc2-policy-generator
-description: Generate draft SOC 2 Type II policy documents. Use when the user needs to create compliance policies, security policies, or mentions SOC 2 certification.
+description: Generate draft SOC 2 Type II policy documents with optional codebase scanning for evidence. Use when the user needs to create compliance policies, security policies, or mentions SOC 2 certification.
 license: MIT
 metadata:
   author: screenata
-  version: "1.0"
+  version: "2.0"
 ---
 
 # SOC 2 Policy Generator
 
-Generate draft SOC 2 Type II policy documents based on company context and answers to targeted questions.
+Generate draft SOC 2 Type II policy documents based on company context, answers to targeted questions, and optionally detected codebase evidence.
 
 ## Important Disclaimer
 
@@ -61,22 +61,33 @@ Ask each question separately. After receiving an answer, proceed to the next que
 
 Save all answers - they apply to all policies generated in this session.
 
-### Step 2: Select Policy
+### Step 2: Scan Codebase for Evidence (Optional)
 
-After gathering context, show the numbered list of 17 policies and ask which ONE to generate:
+After gathering context, ask:
+> Would you like me to scan the codebase for security patterns to include as evidence in the policies?
+> 1. Yes - scan for auth, encryption, CI/CD patterns
+> 2. No - generate policies based on Q&A only
+
+**If user chooses to scan**, use the patterns in [Codebase Scanning Patterns](#codebase-scanning-patterns) below to detect security implementations.
+
+### Step 3: Select Policy
+
+Show the numbered list of 17 policies and ask which ONE to generate:
 
 > Which policy would you like to generate?
 > 1. Governance & Board Oversight
 > 2. Organizational Structure
 > ... (list all 17)
 
-### Step 3: Ask Policy-Specific Questions
+### Step 4: Ask Policy-Specific Questions
 
 For the selected policy, ask each question from [references/policies.md](references/policies.md) **one at a time**. Wait for each answer before asking the next.
 
-### Step 4: Generate the Policy
+### Step 5: Generate the Policy
 
 Generate the policy document following the template structure in [assets/policy-template.md](assets/policy-template.md).
+
+**If codebase evidence was detected**, include an "Evidence from Codebase" section before the "Proof Required Later" section.
 
 **Critical Language Guidelines** - Prioritize under-claiming to minimize audit risk:
 
@@ -87,7 +98,7 @@ Generate the policy document following the template structure in [assets/policy-
 | "all users", "always" | "applicable users", "when possible" |
 | Specific timeframes without brackets | "[timeframe]" placeholders |
 
-### Step 5: Save and Review
+### Step 6: Save and Review
 
 1. Save the policy to `./soc2-policies/{policy-id}.md`
 2. Show a preview of the generated content
@@ -95,6 +106,90 @@ Generate the policy document following the template structure in [assets/policy-
    - Approve and keep the policy
    - Regenerate with different answers
    - Skip to another policy
+
+---
+
+## Codebase Scanning Patterns
+
+When the user opts to scan the codebase, use Glob and Grep tools to detect these patterns:
+
+### Access Control Patterns (CC6.1-6.3)
+
+**Auth Middleware** - Search for authentication middleware:
+```
+Glob: **/middleware/**/*.{ts,js}, **/auth/**/*.{ts,js}, **/api/**/*.{ts,js}
+Grep: withAuth|requireAuth|isAuthenticated|authMiddleware|passport\.(authenticate|use)
+```
+
+**JWT Validation** - Search for token validation:
+```
+Glob: **/*.{ts,js}
+Grep: jwt\.(verify|sign|decode)|jsonwebtoken|jose\.|verifyToken|Bearer.*token
+```
+
+**MFA Configuration** - Search for multi-factor auth:
+```
+Glob: **/*.{ts,js,json,yaml,yml}
+Grep: mfa|multi.?factor|two.?factor|2fa|totp|authenticator|otp
+```
+
+### Data Management Patterns (CC6.5-6.7)
+
+**Encryption at Rest** - Search for encryption configuration:
+```
+Glob: **/*.{tf,yaml,yml,json}, **/config/**, **/infrastructure/**
+Grep: encryption.*(enabled|at.?rest)|encrypted.*true|kms|storage.?encrypted|aes.?256|server.?side.?encryption
+```
+
+### Network Security Patterns (CC6.6-6.7)
+
+**TLS/SSL Configuration** - Search for TLS setup:
+```
+Glob: **/*.{tf,yaml,yml,conf}, **/nginx/**, **/config/**
+Grep: ssl.?(cert|protocol)|tls.?(version|policy)|https.?(only|redirect|enforce)|force.?ssl|min.?tls.?version|listener.*443
+```
+
+### Change Management Patterns (CC8.1)
+
+**CI/CD Pipeline** - Check for pipeline configuration files:
+```
+Glob: .github/workflows/*.yml, .gitlab-ci.yml, Jenkinsfile, azure-pipelines.yml, .circleci/config.yml, bitbucket-pipelines.yml, .travis.yml
+```
+File presence alone indicates CI/CD is configured.
+
+### Vulnerability Monitoring Patterns (CC7.1)
+
+**Dependency Lockfile** - Check for dependency locks:
+```
+Glob: package-lock.json, yarn.lock, pnpm-lock.yaml, bun.lockb, bun.lock, Gemfile.lock, Cargo.lock, poetry.lock, go.sum, composer.lock
+```
+File presence indicates reproducible builds with locked dependencies.
+
+---
+
+## Formatting Detected Evidence
+
+When patterns are found, format them in the policy as:
+
+```markdown
+## Evidence from Codebase
+
+The following security patterns were detected in the codebase:
+
+| File | Line | Pattern | Description |
+|------|------|---------|-------------|
+| src/middleware/auth.ts | 15 | JWT validation | `jwt.verify(token, secret)` |
+| infrastructure/rds.tf | 42 | Encryption | `storage_encrypted = true` |
+| .github/workflows/ci.yml | - | CI/CD | GitHub Actions pipeline configured |
+
+*Evidence detected during codebase scan. Verify implementations before audit submission.*
+```
+
+Reference these findings in the Policy Procedures section where relevant. For example:
+- "Authentication is enforced via JWT validation middleware (see `src/middleware/auth.ts:15`)"
+- "Data at rest is encrypted using AWS KMS (see `infrastructure/rds.tf:42`)"
+
+---
 
 ## Output Location
 
@@ -162,3 +257,4 @@ Format evidence requirements as a table with a Status checkbox column for tracki
 - Tailor complexity to company size (smaller = simpler controls)
 - For healthcare/fintech, include relevant compliance alignment notes
 - Always include placeholders like `[timeframe]`, `[owner name]` for values the user should fill in
+- When scanning is enabled, reference detected implementations with file:line in procedures
