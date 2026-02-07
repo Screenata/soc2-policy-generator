@@ -1,6 +1,6 @@
 ---
 name: soc2-policy-generator
-description: Generate draft SOC 2 Type II policy documents with optional codebase scanning for evidence. Use when the user needs to create compliance policies, security policies, or mentions SOC 2 certification.
+description: Generate draft SOC 2 Type II policy documents with optional codebase/cloud scanning for evidence and automated GitHub Actions workflows for recurring evidence collection. Use when the user needs to create compliance policies, security policies, or mentions SOC 2 certification.
 license: MIT
 metadata:
   author: screenata
@@ -61,14 +61,22 @@ Ask each question separately. After receiving an answer, proceed to the next que
 
 Save all answers - they apply to all policies generated in this session.
 
-### Step 2: Scan Codebase for Evidence (Optional)
+### Step 2: Choose Evidence Collection Method
 
 After gathering context, ask:
-> Would you like me to scan the codebase for security patterns to include as evidence in the policies?
-> 1. Yes - scan for auth, encryption, CI/CD patterns
-> 2. No - generate policies based on Q&A only
+> How would you like to collect evidence for the policies?
+> 1. Code + Cloud - scan codebase AND live cloud infrastructure (most comprehensive)
+> 2. Code only - scan codebase for security patterns (auth, encryption, CI/CD)
+> 3. Q&A only - generate policies based on your answers only
 
-**If user chooses to scan**, use the patterns in [Codebase Scanning Patterns](#codebase-scanning-patterns) below to detect security implementations.
+**If user chooses Code + Cloud (option 1):**
+First, detect available cloud CLIs and verify authentication per [cloud-shared.md](references/scanning-patterns/cloud-shared.md). Report which providers are available. Ask which region(s) to scan. Then scan both codebase (using per-policy scanning files) and cloud infrastructure (using provider files) for the selected policy.
+
+**If user chooses Code only (option 2):**
+Use the scanning patterns for the selected policy from `references/scanning-patterns/` to detect security implementations and extract concrete values (password lengths, role names, session timeouts, TLS versions, etc.). Each policy has its own scanning file — only load the one you need.
+
+**If user chooses Q&A only (option 3):**
+Skip scanning entirely.
 
 ### Step 3: Select Policy
 
@@ -87,7 +95,7 @@ For the selected policy, ask each question from [references/policies.md](referen
 
 Generate the policy document following the template structure in [assets/policy-template.md](assets/policy-template.md).
 
-**If codebase evidence was detected**, include an "Evidence from Codebase" section before the "Proof Required Later" section.
+**If codebase evidence was detected**, include an "Evidence from Codebase" section before the "Proof Required Later" section. **If cloud evidence was detected**, include an "Evidence from Cloud Infrastructure" section as well.
 
 **Critical Language Guidelines** - Prioritize under-claiming to minimize audit risk:
 
@@ -98,6 +106,10 @@ Generate the policy document following the template structure in [assets/policy-
 | "all users", "always" | "applicable users", "when possible" |
 | Specific timeframes without brackets | "[timeframe]" placeholders |
 
+**Exception for codebase-extracted values:** When a concrete value is extracted from the codebase via deep scanning (e.g., password minimum length, session timeout, bcrypt rounds), use that specific value in the policy text with a file:line reference. This is more valuable than a placeholder because it's backed by code evidence. Always include the caveat that values represent code-level configuration and should be verified against production.
+
+**Exception for cloud-extracted values:** When a concrete value is extracted from live cloud infrastructure (e.g., IAM password policy minimum length, RDS backup retention period), use that specific value in the policy text with a CLI command reference. This is more valuable than a placeholder because it reflects actual production configuration. Always include the caveat that values represent a point-in-time snapshot and should be re-verified before audit.
+
 ### Step 6: Save and Review
 
 1. Save the policy to `./soc2-policies/{policy-id}.md`
@@ -107,87 +119,62 @@ Generate the policy document following the template structure in [assets/policy-
    - Regenerate with different answers
    - Skip to another policy
 
----
+### Step 7: Generate Evidence Collection Workflows (Optional)
 
-## Codebase Scanning Patterns
+After saving the policy, ask:
+> Would you like to set up automated evidence collection for this policy?
+> 1. Yes - generate GitHub Actions workflows (code + cloud scanning)
+> 2. Yes - code scanning only (no cloud credentials needed)
+> 3. No - skip workflow generation
 
-When the user opts to scan the codebase, use Glob and Grep tools to detect these patterns:
+**If yes**, use [references/workflow-templates.md](references/workflow-templates.md) to generate:
+- `.github/workflows/soc2-code-scan.yml` — runs codebase pattern scanning weekly + on PRs
+- `.github/workflows/soc2-cloud-scan.yml` — runs cloud CLI scans weekly/monthly (only if Code+Cloud was chosen in Step 2)
 
-### Access Control Patterns (CC6.1-6.3)
+Evidence files are saved to `soc2-evidence/` with code and cloud subdirectories.
 
-**Auth Middleware** - Search for authentication middleware:
-```
-Glob: **/middleware/**/*.{ts,js}, **/auth/**/*.{ts,js}, **/api/**/*.{ts,js}
-Grep: withAuth|requireAuth|isAuthenticated|authMiddleware|passport\.(authenticate|use)
-```
+**If workflows already exist** from a previous policy, update them to include the new policy's scanning steps rather than creating duplicate workflow files.
 
-**JWT Validation** - Search for token validation:
-```
-Glob: **/*.{ts,js}
-Grep: jwt\.(verify|sign|decode)|jsonwebtoken|jose\.|verifyToken|Bearer.*token
-```
-
-**MFA Configuration** - Search for multi-factor auth:
-```
-Glob: **/*.{ts,js,json,yaml,yml}
-Grep: mfa|multi.?factor|two.?factor|2fa|totp|authenticator|otp
-```
-
-### Data Management Patterns (CC6.5-6.7)
-
-**Encryption at Rest** - Search for encryption configuration:
-```
-Glob: **/*.{tf,yaml,yml,json}, **/config/**, **/infrastructure/**
-Grep: encryption.*(enabled|at.?rest)|encrypted.*true|kms|storage.?encrypted|aes.?256|server.?side.?encryption
-```
-
-### Network Security Patterns (CC6.6-6.7)
-
-**TLS/SSL Configuration** - Search for TLS setup:
-```
-Glob: **/*.{tf,yaml,yml,conf}, **/nginx/**, **/config/**
-Grep: ssl.?(cert|protocol)|tls.?(version|policy)|https.?(only|redirect|enforce)|force.?ssl|min.?tls.?version|listener.*443
-```
-
-### Change Management Patterns (CC8.1)
-
-**CI/CD Pipeline** - Check for pipeline configuration files:
-```
-Glob: .github/workflows/*.yml, .gitlab-ci.yml, Jenkinsfile, azure-pipelines.yml, .circleci/config.yml, bitbucket-pipelines.yml, .travis.yml
-```
-File presence alone indicates CI/CD is configured.
-
-### Vulnerability Monitoring Patterns (CC7.1)
-
-**Dependency Lockfile** - Check for dependency locks:
-```
-Glob: package-lock.json, yarn.lock, pnpm-lock.yaml, bun.lockb, bun.lock, Gemfile.lock, Cargo.lock, poetry.lock, go.sum, composer.lock
-```
-File presence indicates reproducible builds with locked dependencies.
+After generating, output:
+1. The list of required GitHub Secrets (per provider)
+2. The minimum IAM/RBAC permissions needed (read-only)
+3. The scan schedule summary
 
 ---
 
-## Formatting Detected Evidence
+## Codebase Scanning Reference
 
-When patterns are found, format them in the policy as:
+Scanning patterns are organized per policy in `references/scanning-patterns/`. Load only the file for the policy being generated.
 
-```markdown
-## Evidence from Codebase
+| Policy | Scanning File | TSC |
+|--------|--------------|-----|
+| Access Control | [access-control.md](references/scanning-patterns/access-control.md) | CC6.1-6.3 |
+| Data Management | [data-management.md](references/scanning-patterns/data-management.md) | CC6.5-6.7 |
+| Network Security | [network-security.md](references/scanning-patterns/network-security.md) | CC6.6-6.7 |
+| Change Management | [change-management.md](references/scanning-patterns/change-management.md) | CC8.1 |
+| Vulnerability & Monitoring | [vulnerability-monitoring.md](references/scanning-patterns/vulnerability-monitoring.md) | CC7.1-7.2 |
 
-The following security patterns were detected in the codebase:
+Shared guidelines (evidence formatting, value usage, unit conversions): [shared.md](references/scanning-patterns/shared.md)
 
-| File | Line | Pattern | Description |
-|------|------|---------|-------------|
-| src/middleware/auth.ts | 15 | JWT validation | `jwt.verify(token, secret)` |
-| infrastructure/rds.tf | 42 | Encryption | `storage_encrypted = true` |
-| .github/workflows/ci.yml | - | CI/CD | GitHub Actions pipeline configured |
+Policies without a scanning file use basic detection only (Glob for file presence, simple Grep for pattern matching).
 
-*Evidence detected during codebase scan. Verify implementations before audit submission.*
-```
+## Cloud Scanning Reference
 
-Reference these findings in the Policy Procedures section where relevant. For example:
-- "Authentication is enforced via JWT validation middleware (see `src/middleware/auth.ts:15`)"
-- "Data at rest is encrypted using AWS KMS (see `infrastructure/rds.tf:42`)"
+Cloud scanning patterns are organized per provider in `references/scanning-patterns/`. Load only the file for the detected provider(s).
+
+| Provider | Scanning File | Covers |
+|----------|--------------|--------|
+| AWS | [aws.md](references/scanning-patterns/aws.md) | IAM, S3, RDS, KMS, ELB, EC2, WAF, ECR, SecurityHub, GuardDuty, CloudTrail, Backup |
+| GCP | [gcp.md](references/scanning-patterns/gcp.md) | IAM, Cloud SQL, KMS, SSL Policies, Firewall, Cloud Armor, SCC |
+| Azure | [azure.md](references/scanning-patterns/azure.md) | Azure AD, RBAC, Storage, SQL, NSG, App Gateway, Defender |
+
+Shared cloud guidelines (detection, auth, safety, evidence format, drift detection): [cloud-shared.md](references/scanning-patterns/cloud-shared.md)
+
+## Workflow Generation Reference
+
+Workflow templates, schedule mapping, output formats, and secrets setup: [references/workflow-templates.md](references/workflow-templates.md)
+
+Code scan YAML template: [assets/workflow-soc2-code-scan.yml.template](assets/workflow-soc2-code-scan.yml.template)
 
 ---
 
@@ -257,4 +244,7 @@ Format evidence requirements as a table with a Status checkbox column for tracki
 - Tailor complexity to company size (smaller = simpler controls)
 - For healthcare/fintech, include relevant compliance alignment notes
 - Always include placeholders like `[timeframe]`, `[owner name]` for values the user should fill in
-- When scanning is enabled, reference detected implementations with file:line in procedures
+- When scanning is enabled, extract concrete values and use them in procedures instead of placeholders. Reference with file:line
+- When a concrete value is found, bold it in both the evidence table and the policy text
+- **Cloud scanning safety**: Only run read-only CLI commands (describe, list, get, show). NEVER run commands that modify infrastructure. Never include secrets, private keys, or credential values in evidence output
+- When both codebase and cloud evidence exist for the same control, compare values and flag any drift/discrepancies between IaC and live infrastructure
