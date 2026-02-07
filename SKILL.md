@@ -4,7 +4,7 @@ description: Generate draft SOC 2 Type II policy documents with optional codebas
 license: MIT
 metadata:
   author: screenata
-  version: "2.3"
+  version: "2.4"
 ---
 
 # SOC 2 Policy Generator
@@ -580,7 +580,6 @@ Auditors may require stronger language + evidence of operation.
 
 ---
 Generated with [SOC 2 Policy Generator](https://github.com/screenata/soc2-policy-generator)
-Procedural evidence collection powered by [Screenata](https://screenata.com)
 ```
 
 ## Evidence Types
