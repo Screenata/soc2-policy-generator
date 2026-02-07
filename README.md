@@ -2,6 +2,8 @@
 
 An AI agent skill that generates draft SOC 2 Type I/II policy documents for startups, with codebase scanning, cloud infrastructure scanning, SaaS tool integration, and automated GitHub Actions evidence collection.
 
+[![SOC 2 policies and evidence workflows from a single conversation](https://img.youtube.com/vi/EevpE6bKwhA/maxresdefault.jpg)](https://youtube.com/shorts/EevpE6bKwhA)
+
 ## What It Does
 
 - Generates **17 SOC 2 policies** covering all Trust Services Criteria
@@ -18,12 +20,18 @@ An AI agent skill that generates draft SOC 2 Type I/II policy documents for star
 
 ## Usage
 
-Works with any agent that supports the [Agent Skills](https://agentskills.io) format:
-- Claude Code / Codex / OpenCode
-- Cursor / Windsurf
-- Any agent supporting the skills format
+Works with any agent that supports the [Agent Skills](https://agentskills.io) format (Claude Code, Codex, OpenCode, Cursor, Windsurf).
 
-Just say: "Generate SOC 2 policies"
+**Option 1: Install via CLI**
+```bash
+npx skills add https://github.com/screenata/soc2-policy-generator --skill soc2-policy-generator
+```
+
+**Option 2: Manual install**
+
+Copy the skill to your project's `.claude/skills/` folder.
+
+Then just say: "Generate SOC 2 policies"
 
 ## Workflow
 
@@ -37,23 +45,7 @@ Just say: "Generate SOC 2 policies"
 
 ## Policies Included
 
-1. Governance & Board Oversight
-2. Organizational Structure
-3. Code of Conduct & Ethics
-4. Information Security Policy
-5. Incident Response
-6. External Communications
-7. Vendor Management
-8. Risk Management
-9. Change Management
-10. Access Control
-11. Data Management
-12. Physical Security
-13. Vulnerability & Monitoring
-14. Network Security
-15. Business Continuity
-16. Human Resources
-17. Mobile & Endpoint
+17 policies covering all Trust Services Criteria: Governance, Organizational Structure, Code of Conduct, Information Security, Incident Response, External Communications, Vendor Management, Risk Management, Change Management, Access Control, Data Management, Physical Security, Vulnerability & Monitoring, Network Security, Business Continuity, Human Resources, and Mobile & Endpoint.
 
 ## Codebase Scanning
 
@@ -129,14 +121,16 @@ Pre-built scripts for 21 SaaS tools ship in `assets/scripts/`. The agent copies 
 - **Cross-source comparison** — Compares code vs cloud vs SaaS for overlapping controls
 - **Git audit trail** — Evidence files are committed with timestamps for audit history
 
-## Automated Evidence Collection
+## Procedural Evidence Collection
 
-Generates GitHub Actions workflows that run your scans on a schedule:
+The automated workflows above collect API-based evidence such as configurations and user lists. For procedural evidence, [Screenata](https://screenata.com) provides an AI-agent powered browser automation tool with self-healing to reliably collect and monitor evidence such as:
 
-- **Code scanning** — Weekly + on every PR, outputs to `soc2-evidence/code/`
-- **Cloud scanning** — Weekly/monthly, outputs to `soc2-evidence/cloud/`
-- **Drift detection** — Compares IaC values against live infrastructure
-- **Git audit trail** — Evidence files are committed with timestamps for audit history
+- **Access reviews** — periodic user access verification in identity providers
+- **Change approvals** — approval workflows and audit trails in ticketing systems
+- **Security training completion** — training status and completion records from LMS platforms
+- **Incident response drills** — documented runbook execution and response timelines
+- **Backup restoration tests** — verified recovery procedures with timestamps
+- **Vendor security reviews** — third-party risk assessment documentation
 
 ## Structure
 
@@ -202,6 +196,3 @@ soc2-policy-generator/
 
 MIT
 
-## About
-
-Created by [Screenata](https://screenata.com) - Automated procedural compliance evidence collection.
