@@ -129,6 +129,15 @@ Pre-built scripts for 21 SaaS tools ship in `assets/scripts/`. The agent copies 
 - **Cross-source comparison** — Compares code vs cloud vs SaaS for overlapping controls
 - **Git audit trail** — Evidence files are committed with timestamps for audit history
 
+## Automated Evidence Collection
+
+Generates GitHub Actions workflows that run your scans on a schedule:
+
+- **Code scanning** — Weekly + on every PR, outputs to `soc2-evidence/code/`
+- **Cloud scanning** — Weekly/monthly, outputs to `soc2-evidence/cloud/`
+- **Drift detection** — Compares IaC values against live infrastructure
+- **Git audit trail** — Evidence files are committed with timestamps for audit history
+
 ## Structure
 
 ```
