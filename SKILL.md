@@ -420,7 +420,6 @@ If any tools have partial or complete progress, present a status summary:
 > Want to skip any tools, or continue with all?
 
 **Skip any tool that already has all checkmarks** (Script + Config + Tested). For partially completed tools, resume from the next incomplete step — don't re-ask for config values that already exist in `{tool}.config.json` or tokens already in `secrets.env`.
-
 For each tool/provider selected, set up an evidence collection script + config pair. Follow [references/script-templates.md](references/script-templates.md) for conventions.
 
 Pre-built scripts for 21 common tools are available in `assets/scripts/`. Use the **copy-first** approach — fall back to generating on demand only when needed.
