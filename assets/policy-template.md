@@ -107,25 +107,79 @@ This policy is available to all [relevant personnel].
 
 ### 8. Evidence from Codebase (if scanning was performed)
 
-Include this section when codebase scanning detected relevant patterns. Place it BEFORE "Proof Required Later".
+Include this section when codebase scanning detected relevant patterns. Place it BEFORE "Proof Required Later". Use the enriched 5-column format with extracted values grouped by policy area:
 
 ```markdown
 ## Evidence from Codebase
 
-The following security patterns were detected in the codebase:
+The following security configurations were detected and their concrete values extracted:
 
-| File | Line | Pattern | Description |
-|------|------|---------|-------------|
-| src/middleware/auth.ts | 15 | JWT validation | `jwt.verify(token, secret)` |
-| infrastructure/rds.tf | 42 | Encryption | `storage_encrypted = true` |
-| .github/workflows/ci.yml | - | CI/CD | GitHub Actions pipeline configured |
+### Access Control Evidence
 
-*Evidence detected during codebase scan. Verify implementations before audit submission.*
+| Control | Extracted Value | File | Line | Raw Evidence |
+|---------|----------------|------|------|-------------|
+| Password minimum length | **12 characters** | src/validation/password.ts | 18 | `minLength: 12` |
+| Password hashing | **bcrypt, 12 rounds** | src/services/auth.ts | 45 | `bcrypt.hash(password, 12)` |
+| RBAC roles | **Admin, Editor, Viewer, Billing** | src/models/user.ts | 12 | `enum Role { ADMIN, EDITOR, VIEWER, BILLING }` |
+| Session timeout | **30 min** | src/config/session.ts | 8 | `maxAge: 1800000` |
+| Account lockout | **5 attempts, 15 min** | src/middleware/rateLimit.ts | 31-32 | `maxAttempts: 5, lockoutDuration: 900` |
+
+*Concrete values extracted during codebase scan. Verify values match production configuration before audit submission.*
 ```
 
-**Important**: Reference these findings in the Policy Procedures section where relevant:
-- "Authentication is enforced via JWT validation middleware (see `src/middleware/auth.ts:15`)"
-- "Data at rest is encrypted using AWS KMS (see `infrastructure/rds.tf:42`)"
+If only basic patterns are detected (presence without extractable values), use the simpler format:
+
+```markdown
+| File | Line | Pattern | Description |
+|------|------|---------|-------------|
+| .github/workflows/ci.yml | - | CI/CD | GitHub Actions pipeline configured |
+```
+
+**Important**: Use extracted concrete values in the Policy Procedures section instead of placeholders:
+- "Passwords must be a minimum of **12 characters** (see `src/validation/password.ts:18`)"
+- "Accounts are locked after **5 consecutive failed login attempts** for **15 minutes** (see `src/middleware/rateLimit.ts:31-32`)"
+- "Access is managed with **4 defined roles: Admin, Editor, Viewer, Billing** (see `src/models/user.ts:12`)"
+
+### 8b. Evidence from Cloud Infrastructure (if cloud scanning was performed)
+
+Include this section when cloud scanning detected relevant configurations. Place it AFTER "Evidence from Codebase" (if present) and BEFORE "Proof Required Later". Use the 6-column format with Service and Region columns:
+
+```markdown
+## Evidence from Cloud Infrastructure
+
+The following configurations were detected from live cloud infrastructure:
+
+| Control | Extracted Value | Service | Region | Command | Raw Evidence |
+|---------|----------------|---------|--------|---------|-------------|
+| Password min length | **14 characters** | AWS IAM | global | `aws iam get-account-password-policy` | `"MinimumPasswordLength": 14` |
+| Root MFA | **enabled** | AWS IAM | global | `aws iam get-account-summary` | `"AccountMFAEnabled": 1` |
+| RDS encryption | **enabled, Multi-AZ** | AWS RDS | us-east-1 | `aws rds describe-db-instances` | `"StorageEncrypted": true` |
+
+*Values extracted from live cloud infrastructure. These represent point-in-time configuration. Re-scan and verify before audit submission.*
+```
+
+If both codebase and cloud evidence exist for overlapping controls, include a drift comparison:
+
+```markdown
+### IaC vs Live Infrastructure Comparison
+
+| Control | IaC Value | Cloud Value | Status |
+|---------|-----------|-------------|--------|
+| RDS backup retention | **30 days** (`infrastructure/rds.tf:38`) | **30 days** (`aws rds describe-db-instances`) | Match |
+| S3 encryption | **SSE-KMS** (`infrastructure/s3.tf:15`) | **SSE-S3** (`aws s3api get-bucket-encryption`) | MISMATCH - review |
+```
+
+### 8c. Automated Evidence Collection (if workflows were generated)
+
+If GitHub Actions workflows were set up (Step 7), add a reference:
+
+```markdown
+## Automated Evidence Collection
+
+Evidence for this policy is automatically collected by GitHub Actions on a **weekly** schedule.
+See `soc2-evidence/` directory for the latest evidence files and `.github/workflows/soc2-*.yml`
+for workflow configuration.
+```
 
 ### 9. Proof Required Later
 
@@ -218,19 +272,34 @@ This policy is available to all personnel with system access responsibilities.
 1. **Access Provisioning**
    - New user access requests are submitted through [ticketing system]
    - Requests require approval from the user's manager
-   - Access is granted based on role requirements within [timeframe]
+   - Access is granted based on role-based access control with **4 defined roles: Admin, Editor, Viewer, and Billing** (see `src/models/user.ts:12`)
+   - The Admin role has full system access; Editor can create/update content; Viewer has read-only access; Billing manages payment settings (see `src/config/permissions.ts:5-28`)
 
 2. **Multi-Factor Authentication**
    - MFA is required for all user accounts
    - [Identity provider] enforces MFA at login
    - Hardware tokens or authenticator apps are acceptable second factors
 
-3. **Access Reviews**
+3. **Password Requirements**
+   - Passwords must be a minimum of **12 characters** with uppercase, lowercase, digit, and special character requirements (see `src/validation/password.ts:18`)
+   - Passwords are hashed using **bcrypt with a cost factor of 12** (2^12 = 4,096 iterations) before storage (see `src/services/auth.ts:45`)
+   - Accounts are locked after **5 consecutive failed login attempts** for **15 minutes** (see `src/middleware/rateLimit.ts:31-32`)
+
+4. **Session Management**
+   - JWT access tokens expire after **15 minutes**; refresh tokens expire after **7 days** (see `src/config/auth.ts:12-13`)
+   - Session cookies are configured with **secure=true, httpOnly=true, sameSite=Strict** (see `src/config/session.ts:14-16`)
+   - User sessions timeout after **30 minutes** of inactivity (see `src/config/session.ts:8`)
+
+5. **Rate Limiting**
+   - API rate limiting is enforced at **100 requests per 15-minute window** for general endpoints (see `src/middleware/rateLimit.ts:5-7`)
+   - Authentication endpoints are limited to **10 requests per 15-minute window** per IP (see `src/middleware/rateLimit.ts:12-15`)
+
+6. **Access Reviews**
    - Access reviews are performed [quarterly/semi-annually/annually]
    - [Role/team] is responsible for conducting reviews
    - Unnecessary access is revoked within [timeframe] of review completion
 
-4. **Access Revocation**
+7. **Access Revocation**
    - Access is revoked within [timeframe] of employment termination
    - HR notifies IT of terminations via [process]
    - A termination checklist documents access revocation
@@ -240,6 +309,45 @@ This policy is available to all personnel with system access responsibilities.
 - The organization uses [identity provider] for identity management
 - All production systems support SSO integration
 - Employees have completed security awareness training
+
+## Evidence from Codebase
+
+The following security configurations were detected and their concrete values extracted:
+
+### Access Control Evidence
+
+| Control | Extracted Value | File | Line | Raw Evidence |
+|---------|----------------|------|------|-------------|
+| Password minimum length | **12 characters** | src/validation/password.ts | 18 | `minLength: 12` |
+| Password complexity | **uppercase, lowercase, digit, special required** | src/validation/password.ts | 19-22 | `requireUppercase: true, ...` |
+| Password hashing | **bcrypt, 12 rounds** | src/services/auth.ts | 45 | `bcrypt.hash(password, 12)` |
+| RBAC roles | **Admin, Editor, Viewer, Billing** | src/models/user.ts | 12 | `enum Role { ADMIN, EDITOR, VIEWER, BILLING }` |
+| Session timeout | **30 min** | src/config/session.ts | 8 | `maxAge: 1800000` |
+| JWT access token expiry | **15 min** | src/config/auth.ts | 12 | `expiresIn: '15m'` |
+| JWT refresh token expiry | **7 days** | src/config/auth.ts | 13 | `expiresIn: '7d'` |
+| Cookie security | **secure, httpOnly, sameSite=Strict** | src/config/session.ts | 14-16 | `secure: true, httpOnly: true, sameSite: 'Strict'` |
+| Account lockout | **5 attempts, 15 min** | src/middleware/rateLimit.ts | 31-32 | `maxAttempts: 5, lockoutDuration: 900` |
+| Rate limit (general) | **100 req / 15 min** | src/middleware/rateLimit.ts | 5-7 | `windowMs: 900000, max: 100` |
+| Rate limit (auth) | **10 req / 15 min** | src/middleware/rateLimit.ts | 12-15 | `windowMs: 900000, max: 10` |
+
+*Concrete values extracted during codebase scan. Verify values match production configuration before audit submission.*
+
+## Evidence from Cloud Infrastructure
+
+| Control | Extracted Value | Service | Region | Command | Raw Evidence |
+|---------|----------------|---------|--------|---------|-------------|
+| Password min length | **14 characters** | AWS IAM | global | `aws iam get-account-password-policy` | `"MinimumPasswordLength": 14` |
+| Root MFA | **enabled** | AWS IAM | global | `aws iam get-account-summary` | `"AccountMFAEnabled": 1` |
+| MFA device coverage | **12 of 15 users** | AWS IAM | global | `aws iam get-account-summary` | `"MFADevicesInUse": 12` |
+| IAM roles | **23 roles defined** | AWS IAM | global | `aws iam list-roles` | 23 roles including service roles |
+
+*Values extracted from live cloud infrastructure. Re-scan and verify before audit submission.*
+
+### IaC vs Live Infrastructure Comparison
+
+| Control | IaC Value | Cloud Value | Status |
+|---------|-----------|-------------|--------|
+| Password min length | **12 chars** (`src/validation/password.ts:18`) | **14 chars** (`aws iam get-account-password-policy`) | MISMATCH - IAM policy is stricter |
 
 ## Proof Required Later
 
