@@ -1,22 +1,18 @@
 # Compliance Automation
 
-An AI agent skill that generates draft compliance policy documents (SOC 2, ISO 27001) for startups, with codebase scanning, cloud infrastructure scanning, SaaS tool integration, and automated GitHub Actions evidence collection.
+An AI agent skill that generates draft compliance policy documents (SOC 2, ISO 27001) for startups, with codebase scanning, cloud infrastructure scanning, SaaS tool integration, automated GitHub Actions evidence collection, and auditor control matrix response mapping.
 
 ![Compliance policies and evidence workflows from a single conversation](https://github.com/user-attachments/assets/c49c4f7f-de8c-4c99-8d34-f0223297955d)
 
 ## What It Does
 
-- Generates **17 policies** covering SOC 2 Trust Services Criteria and ISO 27001:2022 Annex A controls
-- Tailors policies to your company size, industry, and data types
-- **Scans codebase** for security patterns and extracts concrete values (password lengths, bcrypt rounds, RBAC roles, session timeouts, TLS versions)
-- **Scans cloud infrastructure** (AWS, GCP, Azure) for live configuration evidence
-- **Scans SaaS tools** (Okta, Datadog, PagerDuty, Jira, etc.) via API for compliance evidence
-- **Detects drift** between code, cloud, and SaaS configurations with cross-source comparison
-- **Generates GitHub Actions workflows** for automated, recurring evidence collection
-- **Auto-detects SaaS tools** from your codebase (env files, package managers, Terraform, CI configs)
-- **Persists session state** across conversations so you can resume mid-workflow
-- Includes evidence checklists with auditor sufficiency criteria
-- Uses audit-safe language that under-claims to reduce risk
+One skill, three workflows:
+
+1. **Generate policies** — Answer questions, scan your codebase/cloud/SaaS for evidence, generate 17 draft policies with concrete values and audit-safe language
+2. **Automate evidence collection** — Set up scripts for SaaS tools, cloud providers, and codebase scanning, wired into GitHub Actions for recurring collection
+3. **Respond to auditors** — Map control matrices and security questionnaires to your policies, generate draft responses, write back to XLSX
+
+The skill routes automatically based on what you ask for. The `.compliance/` directory is the shared state — policies, evidence, and responses all live there and reference each other.
 
 ## Usage
 
@@ -31,17 +27,7 @@ npx skills add https://github.com/screenata/compliance-automation --skill compli
 
 Copy the skill to your project's `.claude/skills/` folder.
 
-Then just say: "Generate compliance policies" or "Generate SOC 2 policies" or "Generate ISO 27001 policies"
-
-## Workflow
-
-1. **Gather context** — Resumes from `.compliance/config.json` if available; auto-detects SaaS tools from codebase; asks industry, company size, data types, cert type, org name
-2. **Choose evidence collection** — Code + Cloud + SaaS, Code + Cloud, Code + SaaS, Code only, or Q&A only
-3. **Select policy** — Pick from 17 available policies
-4. **Answer questions** — Policy-specific questions asked one at a time
-5. **Generate policy** — Full document with evidence tables and concrete values
-6. **Save and review** — Approve, regenerate, or skip
-7. **Generate workflows** — Optional GitHub Actions for automated evidence collection
+Then just say: "Generate compliance policies" or "Set up evidence collection" or paste a control matrix.
 
 ## Policies Included
 
@@ -71,8 +57,6 @@ Scans live AWS, GCP, and Azure environments using CLI tools (read-only commands 
 
 ## SaaS Tool Integration
 
-The agent generates API integrations on demand for your SaaS stack — no pre-built connectors needed:
-
 | Category | Tools | Evidence Collected |
 |----------|-------|-------------------|
 | Identity & Access | Okta, Auth0, Google Workspace, JumpCloud | MFA enrollment rates, password policies, admin roles, deprovisioned users |
@@ -82,44 +66,61 @@ The agent generates API integrations on demand for your SaaS stack — no pre-bu
 | Endpoint Management | Jamf, Kandji, Intune | Managed device counts, encryption status, compliance policies |
 | Security Scanning | Snyk, SonarCloud | Vulnerability counts by severity, quality gate status, monitored projects |
 
-For tools not in the catalog, the agent uses its API knowledge to generate integrations on the fly, or asks for documentation.
+## Automated Evidence Collection
 
-## SaaS Auto-Detection
+Pre-built scripts for 26 tools ship in `assets/scripts/`. The agent copies them, configures, tests locally, then wires into GitHub Actions workflows:
 
-Before asking you to list your SaaS tools, the skill scans your codebase for signals:
-
-| Signal Source | Examples |
-|---------------|----------|
-| Env templates | `.env.example` with `OKTA_DOMAIN`, `DD_API_KEY` |
-| Package managers | `@okta/okta-sdk-nodejs` in package.json, `dd-trace` in requirements.txt |
-| Terraform | `provider "datadog"`, `provider "pagerduty"` in `*.tf` files |
-| CI/CD | `snyk/actions`, `sonarsource/sonarcloud` in GitHub Actions |
-| Config files | `newrelic.js`, `.snyk`, `sonar-project.properties` |
-| Docker Compose | `datadog/agent` images |
-
-Detected tools are presented for confirmation, not assumed. Falls back to manual selection if nothing is detected.
+- **Code scanning** — Weekly + on every PR, outputs to `.compliance/evidence/code/`
+- **Cloud scanning** — Weekly/monthly, outputs to `.compliance/evidence/cloud/`
+- **SaaS scanning** — Weekly, outputs to `.compliance/evidence/saas/`
+- **Git audit trail** — Evidence files are committed with timestamps for audit history
 
 ## Session Persistence
 
 The skill tracks progress in the `.compliance/` folder (committed to your repo):
 
-- **`.compliance/config.json`** — org name, policy owner, industry, company size, data types, cert type, evidence method
-- **`.compliance/status.md`** — policies generated, SaaS tools configured, workflows created
+- **`.compliance/config.json`** — org context persists across conversations
+- **`.compliance/status.md`** — policies generated, tools configured, workflows created
 - **`.compliance/answers/{policy}.md`** — per-policy Q&A answers (editable before generation)
 
-If a session ends mid-way (e.g., you configured 3 of 6 SaaS tools), the next session picks up where you left off.
+If a session ends mid-way, the next session picks up where you left off.
 
-## Automated Evidence Collection
+## Structure
 
-Pre-built scripts for 21 SaaS tools ship in `assets/scripts/`. The agent copies them, configures, tests locally, then wires into GitHub Actions workflows:
+```
+compliance-automation/
+├── SKILL.md                          # Router — detects intent, loads workflow
+├── references/
+│   ├── workflow-policies.md          # Policy generation steps (1-6)
+│   ├── workflow-evidence.md          # Evidence collection steps
+│   ├── workflow-responses.md         # Auditor response mapping steps
+│   ├── policies.md                   # 17 policy definitions with questions
+│   ├── frameworks/
+│   │   ├── soc2.md                  # SOC 2 TSC control mappings
+│   │   └── iso27001.md              # ISO 27001 Annex A control mappings
+│   ├── workflow-templates.md         # GitHub Actions generation guidelines
+│   ├── script-templates.md           # Script conventions
+│   ├── task-system.md                # Task queue specification
+│   ├── saas-integrations/            # SaaS API patterns per category
+│   └── scanning-patterns/            # Codebase + cloud scanning patterns
+└── assets/
+    ├── policy-template.md            # Output template with evidence formats
+    ├── workflow-*.yml.template       # GitHub Actions templates
+    └── scripts/                      # 26 pre-built evidence collection scripts
+```
 
-- **Copy-first approach** — pre-built scripts are copied and tested; generate-on-demand is the fallback if APIs have changed
-- **Per-tool scripts** — each tool gets `{tool}.sh` + `{tool}.config.json` (atomic pair) in `.compliance/scripts/`
-- **Code scanning** — Weekly + on every PR, outputs to `.compliance/evidence/code/`
-- **Cloud scanning** — Weekly/monthly, outputs to `.compliance/evidence/cloud/`
-- **SaaS scanning** — Weekly, outputs to `.compliance/evidence/saas/`
-- **Cross-source comparison** — Compares code vs cloud vs SaaS for overlapping controls
-- **Git audit trail** — Evidence files are committed with timestamps for audit history
+**Generated at runtime** (committed to user's repo):
+```
+.compliance/
+├── config.json               # Global config — persists across conversations
+├── status.md                 # Progress tracking (policies, tools, workflows)
+├── secrets.env               # API tokens (DO NOT commit — in .gitignore)
+├── answers/{policy-id}.md    # Per-policy Q&A answers (editable)
+├── policies/{policy-id}.md   # Generated policy documents
+├── scripts/                  # Evidence collection scripts + configs
+├── evidence/                 # Collected evidence (code/, cloud/, saas/, manual/)
+└── responses/                # Auditor response mappings + filled spreadsheets
+```
 
 ## Procedural Evidence Collection
 
@@ -132,70 +133,6 @@ The automated workflows above collect API-based evidence such as configurations 
 - **Backup restoration tests** — verified recovery procedures with timestamps
 - **Vendor security reviews** — third-party risk assessment documentation
 
-## Structure
-
-```
-compliance-automation/
-├── SKILL.md                          # Main skill workflow (Steps 1-7b)
-├── references/
-│   ├── policies.md                   # 17 policy definitions with questions
-│   ├── frameworks/
-│   │   ├── soc2.md                  # SOC 2 TSC control mappings per policy
-│   │   └── iso27001.md              # ISO 27001 Annex A control mappings per policy
-│   ├── workflow-templates.md         # GitHub Actions generation guidelines
-│   ├── script-templates.md           # Script conventions, config pattern, test workflow
-│   ├── saas-integrations/
-│   │   ├── shared.md                # Evidence format, script pattern, secrets
-│   │   ├── identity.md              # Okta, Auth0, Google Workspace, JumpCloud
-│   │   ├── monitoring.md            # Datadog, PagerDuty, New Relic, Splunk
-│   │   ├── project-management.md    # Jira, Linear, GitHub
-│   │   ├── communications.md        # Slack, Opsgenie, Statuspage
-│   │   ├── hr.md                    # BambooHR, Gusto, Rippling
-│   │   ├── endpoint.md              # Jamf, Kandji, Intune
-│   │   └── security.md              # Snyk, SonarCloud
-│   └── scanning-patterns/
-│       ├── shared.md                 # Codebase evidence formatting guidelines
-│       ├── cloud-shared.md           # Cloud scanning safety and auth rules
-│       ├── saas-detection.md          # Auto-detect SaaS tools from codebase
-│       ├── access-control.md         # CC6.1-6.3 code patterns
-│       ├── data-management.md        # CC6.5-6.7 code patterns
-│       ├── network-security.md       # CC6.6-6.7 code patterns
-│       ├── change-management.md      # CC8.1 code patterns
-│       ├── vulnerability-monitoring.md # CC7.1-7.2 code patterns
-│       ├── aws.md                    # AWS CLI scanning patterns
-│       ├── gcp.md                    # GCP gcloud scanning patterns
-│       └── azure.md                  # Azure CLI scanning patterns
-└── assets/
-    ├── policy-template.md            # Output template with evidence formats
-    ├── workflow-compliance-code-scan.yml.template   # Code scan workflow template
-    ├── workflow-compliance-saas-scan.yml.template   # SaaS scan workflow template
-    └── scripts/                      # Pre-built evidence collection scripts
-        ├── collect-all.sh            # Runner: discovers and executes all scripts
-        ├── okta.sh, auth0.sh, ...    # 21 SaaS tool scripts (copy to .compliance/scripts/)
-        └── README: see script-templates.md for full list
-```
-
-**Generated at runtime** (committed to user's repo):
-```
-.compliance/
-├── config.json               # Global config — persists across conversations
-├── status.md                 # Progress tracking (policies, tools, workflows)
-├── secrets.env               # API tokens for local testing (DO NOT commit — add to .gitignore)
-├── answers/
-│   └── {policy-id}.md        # Per-policy Q&A answers (editable)
-├── policies/
-│   └── {policy-id}.md        # Generated policy documents
-├── scripts/
-│   ├── collect-all.sh        # Runner: executes all scripts
-│   ├── {tool}.sh             # Per-tool evidence collection script
-│   └── {tool}.config.json    # Per-tool config (non-secret settings)
-└── evidence/
-    ├── code/                 # Codebase scan results
-    ├── cloud/                # Cloud infrastructure scan results
-    └── saas/                 # SaaS tool scan results
-```
-
 ## License
 
 MIT
-

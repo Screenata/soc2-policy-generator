@@ -62,6 +62,8 @@ Evidence scripts live in `.compliance/scripts/`, evidence output goes to `.compl
     (one file per configured SaaS tool)
   drift/
     drift-report.md         (IaC vs live + cross-source comparison)
+  manual/                   # User-collected manual evidence
+    {policy-id}/            # One folder per policy (e.g., access-control/)
   README.md                 (auto-generated index with timestamps)
 ```
 
