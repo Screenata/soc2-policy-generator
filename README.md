@@ -1,6 +1,6 @@
 # Compliance Automation
 
-An AI agent skill that generates draft compliance policy documents (SOC 2, ISO 27001) for startups, with codebase scanning, cloud infrastructure scanning, SaaS tool integration, and automated GitHub Actions evidence collection.
+An AI agent skill that automates compliance prep (SOC 2, ISO 27001) for startups. It generates draft compliance policy documents and automates evidence collection.
 
 ![Compliance policies and evidence workflows from a single conversation](https://github.com/user-attachments/assets/c49c4f7f-de8c-4c99-8d34-f0223297955d)
 
