@@ -1,6 +1,6 @@
 ---
 name: compliance-automation
-description: Generate draft compliance policy documents (SOC 2, ISO 27001) with codebase, cloud, and SaaS scanning for evidence, automated GitHub Actions workflows for recurring evidence collection, and auditor control matrix response mapping. Use when the user needs compliance policies, evidence collection, audit preparation, or wants to respond to a security questionnaire or control matrix.
+description: Generate draft compliance policy documents (SOC 2, ISO 27001) with codebase, cloud, and SaaS scanning for evidence, automated GitHub Actions workflows for recurring evidence collection, auditor control matrix response mapping, audit readiness assessments, and SOC 2 orientation for newcomers. Use when the user needs compliance policies, evidence collection, audit preparation, readiness assessment, gap analysis, SOC 2 explanation, or wants to respond to a security questionnaire or control matrix.
 license: MIT
 metadata:
   author: screenata
@@ -9,7 +9,7 @@ metadata:
 
 # Compliance Automation
 
-Generate compliance policies, automate evidence collection, and respond to auditor control matrices — all from one skill.
+Generate compliance policies, automate evidence collection, assess audit readiness, and respond to auditor control matrices — all from one skill.
 
 ## Important Disclaimer
 
@@ -24,6 +24,8 @@ Use this skill when the user:
 - Wants to set up automated evidence collection or GitHub Actions workflows
 - Pastes an auditor's control matrix or security questionnaire
 - Asks to respond to a vendor security questionnaire (SIG, CAIQ, or custom)
+- Wants to assess audit readiness, run a gap analysis, or understand compliance posture
+- Is new to SOC 2 and wants to understand the basics before starting
 
 ## Routing
 
@@ -47,13 +49,46 @@ Route here if the user specifically asks about evidence collection without needi
 
 **If detected →** Load [references/workflow-evidence.md](references/workflow-evidence.md) and follow its steps.
 
+### Route D: Audit Readiness Assessment
+
+Route here if the user wants to understand their current compliance posture before generating policies:
+
+- **Keywords:** "how ready are we", "readiness assessment", "gap analysis", "compliance gaps", "assess our compliance", "compliance posture", "what's missing", "pre-audit check", "compliance scan", "where do we stand", "security assessment", "audit readiness"
+- **Structural signals:** User asks an evaluative question about their current state rather than requesting a specific artifact (policy, script, response)
+- **Explicit request:** "scan my codebase for compliance", "show me our gaps", "run an assessment"
+
+**If detected →** Load [references/workflow-assessment.md](references/workflow-assessment.md) and follow its steps.
+
+### Route E: Orientation & Getting Started
+
+Route here if the user is new to compliance or asking foundational questions:
+
+- **Keywords:** "what is SOC 2", "where do I start", "new to compliance", "SOC 2 101", "explain SOC 2", "how does SOC 2 work", "getting started", "first time", "help me understand", "what do I need for SOC 2"
+- **Structural signals:** User asks broad/foundational questions rather than requesting a specific artifact (policy, script, response) or action
+- **Explicit request:** "walk me through SOC 2", "I don't know where to begin"
+
+**If detected →** Load [references/workflow-orientation.md](references/workflow-orientation.md) and follow its steps.
+
 ### Route C: Policy Generation (default)
 
-If neither Route A nor B matches, this is the default. The user wants to generate policies:
+If none of Routes A, B, D, or E match, this is the default. The user wants to generate policies:
 
 - **Keywords:** "generate policies", "SOC 2", "ISO 27001", "compliance policies", "security policies", "audit preparation"
 
-**Load →** [references/workflow-policies.md](references/workflow-policies.md) and follow its steps.
+**First-time user nudge:** If Route C triggers AND `.compliance/config.json` does not exist, present this choice before starting the policy workflow:
+
+> Before generating policies, I'd recommend starting with a **readiness assessment** to understand where you stand. This takes about 5 minutes and scans your codebase for existing controls.
+>
+> Would you like to:
+> 1. Run a readiness assessment first (recommended)
+> 2. Jump straight to policy generation
+> 3. Get a quick orientation on how SOC 2 works
+
+- If **option 1** → Load [references/workflow-assessment.md](references/workflow-assessment.md) and follow its steps
+- If **option 2** → Load [references/workflow-policies.md](references/workflow-policies.md) and follow its steps
+- If **option 3** → Load [references/workflow-orientation.md](references/workflow-orientation.md) and follow its steps
+
+**If `.compliance/config.json` already exists**, skip the nudge and load [references/workflow-policies.md](references/workflow-policies.md) directly.
 
 **After policies are generated**, the user may continue to evidence collection (Route B) or receive an external document (Route A). The workflows interconnect through the `.compliance/` directory.
 
@@ -67,6 +102,7 @@ If neither Route A nor B matches, this is the default. The user wants to generat
 .compliance/
 ├── config.json               # Company context — created during onboarding, read by all workflows
 ├── status.md                 # Progress tracking — updated by all workflows
+├── assessment.md             # Readiness assessment report (generated by assessment workflow)
 ├── secrets.env               # API tokens (must be in .gitignore)
 ├── tasks/                    # Filesystem task queue for tracking work items
 │   └── {task-id}.md          # See references/task-system.md
@@ -143,6 +179,8 @@ Format evidence requirements as a table with a Status checkbox column. Include *
 | Policy Generation | [workflow-policies.md](references/workflow-policies.md) | User wants to generate policies (Steps 1-6) |
 | Evidence Collection | [workflow-evidence.md](references/workflow-evidence.md) | User wants evidence scripts + GitHub Actions |
 | Document Response | [workflow-responses.md](references/workflow-responses.md) | User provides a control matrix or questionnaire |
+| Audit Readiness Assessment | [workflow-assessment.md](references/workflow-assessment.md) | User wants to assess compliance posture or run a gap analysis |
+| Orientation | [workflow-orientation.md](references/workflow-orientation.md) | User is new to SOC 2 and needs foundational understanding |
 
 ### Codebase Scanning
 | Policy | Scanning File | SOC 2 TSC | ISO 27001 Annex A |
@@ -181,12 +219,14 @@ Shared SaaS guidelines: [shared.md](references/saas-integrations/shared.md)
 | Reference | File |
 |-----------|------|
 | Policy template | [assets/policy-template.md](assets/policy-template.md) |
+| Assessment template | [assets/assessment-template.md](assets/assessment-template.md) |
 | Script conventions | [references/script-templates.md](references/script-templates.md) |
 | Workflow templates | [references/workflow-templates.md](references/workflow-templates.md) |
 | Framework: SOC 2 | [references/frameworks/soc2.md](references/frameworks/soc2.md) |
 | Framework: ISO 27001 | [references/frameworks/iso27001.md](references/frameworks/iso27001.md) |
 | Policy questions | [references/policies.md](references/policies.md) |
 | Task system | [references/task-system.md](references/task-system.md) |
+| Small-team controls | [references/small-team-controls.md](references/small-team-controls.md) |
 | Evidence scripts | [assets/scripts/](assets/scripts/) |
 
 ## Important Notes
