@@ -42,6 +42,7 @@ run_az() {
       return 0
     else
       log "FAILED (rc=${rc}) after ${elapsed}s: ${description}"
+      log "  → ${result}"
       echo '[]'
       return 0
     fi

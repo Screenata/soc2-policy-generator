@@ -4,24 +4,63 @@
 # Requires: AWS credentials configured (env vars or AWS CLI profile)
 # Config:   aws.config.json (co-located)
 # Safety:   READ-ONLY commands only (describe, list, get)
+# Usage:    bash aws.sh [-v] [-t TIMEOUT]
 set -uo pipefail
 
-# ── CLI check ──────────────────────────────────────────
-if ! command -v aws &>/dev/null; then
-  echo "Skipping AWS (aws CLI not installed)"
-  exit 0
-fi
-if ! command -v jq &>/dev/null; then
-  echo "ERROR: jq is required but not installed. Install it with: apt-get install jq (Linux) or brew install jq (macOS)"
-  exit 1
-fi
+# ── Options ────────────────────────────────────────────
+VERBOSE=false
+CMD_TIMEOUT=30  # seconds per aws command
+
+while getopts "vt:" opt; do
+  case $opt in
+    v) VERBOSE=true ;;
+    t) CMD_TIMEOUT="$OPTARG" ;;
+    *) echo "Usage: $0 [-v] [-t TIMEOUT_SECS]"; exit 1 ;;
+  esac
+done
+
+log() {
+  if $VERBOSE; then
+    echo "[$(date -u '+%H:%M:%S')] $*" >&2
+  fi
+}
+
+# Run an aws command with timeout; on failure, return fallback JSON
+# Usage: run_aws "description" "fallback_json" command args...
+run_aws() {
+  local description="$1"
+  local fallback="${2:-[]}"
+  shift 2
+  log "START: ${description} → $*"
+  local start_ts
+  start_ts=$(date +%s)
+  local result
+  result=$(timeout "${CMD_TIMEOUT}" "$@" 2>&1 </dev/null) || {
+    local rc=$?
+    local elapsed=$(( $(date +%s) - start_ts ))
+    if [ $rc -eq 124 ]; then
+      log "TIMEOUT after ${elapsed}s: ${description}"
+    else
+      log "FAILED (rc=${rc}) after ${elapsed}s: ${description}"
+      log "  → ${result}"
+    fi
+    echo "$fallback"
+    return 0
+  }
+  local elapsed=$(( $(date +%s) - start_ts ))
+  log "DONE (${elapsed}s): ${description}"
+  echo "$result"
+}
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CONFIG="${SCRIPT_DIR}/$(basename "$0" .sh).config.json"
 REGION=$(jq -r '.region // "us-east-1"' "$CONFIG")
 
 export AWS_DEFAULT_REGION="$REGION"
-export AWS_PAGER=""
+
+log "Config: ${CONFIG}"
+log "Region: ${REGION}"
+log "Command timeout: ${CMD_TIMEOUT}s"
 
 OUT="${COMPLIANCE_EVIDENCE_DIR:-.compliance/evidence/cloud}/aws-evidence.md"
 mkdir -p "$(dirname "$OUT")"
@@ -37,7 +76,8 @@ mkdir -p "$(dirname "$OUT")"
 } > "$OUT"
 
 # ── Verify Authentication ───────────────────────────────
-identity=$(aws sts get-caller-identity --output json 2>&1 || echo '{"error": true}')
+log "Verifying AWS authentication..."
+identity=$(run_aws "caller identity" '{"error": true}' aws sts get-caller-identity --output json)
 if echo "$identity" | jq -e '.Account' > /dev/null 2>&1; then
   account=$(echo "$identity" | jq -r '.Account')
   echo "| AWS Account | **${account}** | STS | global | \`aws sts get-caller-identity\` | Authenticated successfully |" >> "$OUT"
@@ -52,7 +92,8 @@ fi
 # ── Access Control (CC6.1-6.3) ──────────────────────────
 
 # IAM Password Policy
-result=$(aws iam get-account-password-policy --output json 2>&1 || echo '{"error": true}')
+log "Checking IAM password policy..."
+result=$(run_aws "password policy" '{"error": true}' aws iam get-account-password-policy --output json)
 if echo "$result" | jq -e '.PasswordPolicy' > /dev/null 2>&1; then
   min_len=$(echo "$result" | jq -r '.PasswordPolicy.MinimumPasswordLength')
   max_age=$(echo "$result" | jq -r '.PasswordPolicy.MaxPasswordAge // "none"')
@@ -74,7 +115,8 @@ else
 fi
 
 # MFA Status
-result=$(aws iam get-account-summary --output json 2>&1 || echo '{}')
+log "Checking MFA status..."
+result=$(run_aws "account summary" '{}' aws iam get-account-summary --output json)
 if echo "$result" | jq -e '.SummaryMap' > /dev/null 2>&1; then
   root_mfa=$(echo "$result" | jq -r '.SummaryMap.AccountMFAEnabled')
   mfa_devices=$(echo "$result" | jq -r '.SummaryMap.MFADevicesInUse')
@@ -88,33 +130,35 @@ if echo "$result" | jq -e '.SummaryMap' > /dev/null 2>&1; then
 fi
 
 # IAM Roles
-result=$(aws iam list-roles --output json 2>&1 || echo '{"Roles": []}')
+log "Listing IAM roles..."
+result=$(run_aws "IAM roles" '{"Roles": []}' aws iam list-roles --output json)
 role_count=$(echo "$result" | jq '.Roles | length')
 echo "| IAM roles | **${role_count} defined** | IAM | global | \`aws iam list-roles\` | ${role_count} roles including service roles |" >> "$OUT"
 
 # ── Data Management (CC6.5-6.7) ─────────────────────────
 
 # S3 Buckets & Encryption
-buckets=$(aws s3api list-buckets --output json --query "Buckets[].Name" 2>&1 || echo '[]')
+log "Checking S3 buckets..."
+buckets=$(run_aws "S3 buckets" '[]' aws s3api list-buckets --output json --query "Buckets[].Name")
 bucket_count=$(echo "$buckets" | jq 'length')
 if [ "$bucket_count" -gt 0 ]; then
   encrypted=0
   unencrypted=0
   for bucket in $(echo "$buckets" | jq -r '.[]' | head -20); do
-    enc=$(aws s3api get-bucket-encryption --bucket "$bucket" --output json 2>&1 || echo '{"error": true}')
+    enc=$(run_aws "S3 encryption ${bucket}" '{"error": true}' aws s3api get-bucket-encryption --bucket "$bucket" --output json)
     if echo "$enc" | jq -e '.ServerSideEncryptionConfiguration' > /dev/null 2>&1; then
       encrypted=$((encrypted + 1))
     else
       unencrypted=$((unencrypted + 1))
     fi
   done
-  checked=$((encrypted + unencrypted))
-  echo "| S3 buckets | **${bucket_count} total** | S3 | global | \`aws s3api list-buckets\` | ${encrypted} encrypted, ${unencrypted} unencrypted (sampled ${checked} of ${bucket_count}) |" >> "$OUT"
-  echo "| S3 encryption | **${encrypted} of ${checked} sampled encrypted** | S3 | global | \`aws s3api get-bucket-encryption\` | Server-side encryption check (first 20) |" >> "$OUT"
+  echo "| S3 buckets | **${bucket_count} total** | S3 | ${REGION} | \`aws s3api list-buckets\` | ${encrypted} encrypted, ${unencrypted} unencrypted |" >> "$OUT"
+  echo "| S3 encryption | **${encrypted} of ${bucket_count} encrypted** | S3 | ${REGION} | \`aws s3api get-bucket-encryption\` | Server-side encryption check |" >> "$OUT"
 fi
 
 # RDS Instances
-result=$(aws rds describe-db-instances --output json 2>&1 || echo '{"DBInstances": []}')
+log "Checking RDS instances..."
+result=$(run_aws "RDS instances" '{"DBInstances": []}' aws rds describe-db-instances --output json)
 db_count=$(echo "$result" | jq '.DBInstances | length')
 if [ "$db_count" -gt 0 ]; then
   for i in $(seq 0 $((db_count - 1))); do
@@ -130,17 +174,18 @@ else
 fi
 
 # KMS Keys
-result=$(aws kms list-keys --output json 2>&1 || echo '{"Keys": []}')
+log "Checking KMS keys..."
+result=$(run_aws "KMS keys" '{"Keys": []}' aws kms list-keys --output json)
 key_count=$(echo "$result" | jq '.Keys | length')
 if [ "$key_count" -gt 0 ]; then
   customer_keys=0
   rotation_enabled=0
   for key_id in $(echo "$result" | jq -r '.Keys[].KeyId' | head -10); do
-    key_info=$(aws kms describe-key --key-id "$key_id" --output json 2>&1 || echo '{}')
+    key_info=$(run_aws "KMS key ${key_id}" '{}' aws kms describe-key --key-id "$key_id" --output json)
     manager=$(echo "$key_info" | jq -r '.KeyMetadata.KeyManager // "unknown"')
     if [ "$manager" = "CUSTOMER" ]; then
       customer_keys=$((customer_keys + 1))
-      rotation=$(aws kms get-key-rotation-status --key-id "$key_id" --output json 2>&1 || echo '{}')
+      rotation=$(run_aws "KMS rotation ${key_id}" '{}' aws kms get-key-rotation-status --key-id "$key_id" --output json)
       is_rotating=$(echo "$rotation" | jq -r '.KeyRotationEnabled // false')
       if [ "$is_rotating" = "true" ]; then
         rotation_enabled=$((rotation_enabled + 1))
@@ -151,7 +196,8 @@ if [ "$key_count" -gt 0 ]; then
 fi
 
 # CloudWatch Log Groups
-result=$(aws logs describe-log-groups --output json --limit 50 2>&1 || echo '{"logGroups": []}')
+log "Checking CloudWatch log groups..."
+result=$(run_aws "CloudWatch log groups" '{"logGroups": []}' aws logs describe-log-groups --output json --limit 50)
 log_count=$(echo "$result" | jq '.logGroups | length')
 if [ "$log_count" -gt 0 ]; then
   with_retention=$(echo "$result" | jq '[.logGroups[] | select(.retentionInDays != null)] | length')
@@ -161,7 +207,8 @@ fi
 # ── Network Security (CC6.6-6.7) ────────────────────────
 
 # Security Groups
-result=$(aws ec2 describe-security-groups --output json 2>&1 || echo '{"SecurityGroups": []}')
+log "Checking security groups..."
+result=$(run_aws "security groups" '{"SecurityGroups": []}' aws ec2 describe-security-groups --output json)
 sg_count=$(echo "$result" | jq '.SecurityGroups | length')
 if [ "$sg_count" -gt 0 ]; then
   open_ssh=$(echo "$result" | jq '[.SecurityGroups[].IpPermissions[] | select(.FromPort == 22 and .ToPort == 22) | .IpRanges[] | select(.CidrIp == "0.0.0.0/0")] | length')
@@ -169,14 +216,16 @@ if [ "$sg_count" -gt 0 ]; then
 fi
 
 # WAF
-result=$(aws wafv2 list-web-acls --scope REGIONAL --output json 2>&1 || echo '{"WebACLs": []}')
+log "Checking WAF Web ACLs..."
+result=$(run_aws "WAF Web ACLs" '{"WebACLs": []}' aws wafv2 list-web-acls --scope REGIONAL --output json)
 waf_count=$(echo "$result" | jq '.WebACLs | length')
 echo "| WAF Web ACLs | **${waf_count} regional** | WAF | ${REGION} | \`aws wafv2 list-web-acls\` | ${waf_count} Web ACLs configured |" >> "$OUT"
 
 # ── Vulnerability & Monitoring (CC7.1-7.2) ───────────────
 
 # GuardDuty
-result=$(aws guardduty list-detectors --output json 2>&1 || echo '{"DetectorIds": []}')
+log "Checking GuardDuty..."
+result=$(run_aws "GuardDuty detectors" '{"DetectorIds": []}' aws guardduty list-detectors --output json)
 gd_count=$(echo "$result" | jq '.DetectorIds | length')
 if [ "$gd_count" -gt 0 ]; then
   echo "| GuardDuty | **enabled** | GuardDuty | ${REGION} | \`aws guardduty list-detectors\` | ${gd_count} detector(s) active |" >> "$OUT"
@@ -185,7 +234,8 @@ else
 fi
 
 # Security Hub
-result=$(aws securityhub describe-hub --output json 2>&1 || echo '{"error": true}')
+log "Checking Security Hub..."
+result=$(run_aws "Security Hub" '{"error": true}' aws securityhub describe-hub --output json)
 if echo "$result" | jq -e '.HubArn' > /dev/null 2>&1; then
   echo "| Security Hub | **enabled** | SecurityHub | ${REGION} | \`aws securityhub describe-hub\` | Hub active |" >> "$OUT"
 else
@@ -193,7 +243,8 @@ else
 fi
 
 # CloudTrail
-result=$(aws cloudtrail describe-trails --output json 2>&1 || echo '{"trailList": []}')
+log "Checking CloudTrail..."
+result=$(run_aws "CloudTrail trails" '{"trailList": []}' aws cloudtrail describe-trails --output json)
 trail_count=$(echo "$result" | jq '.trailList | length')
 if [ "$trail_count" -gt 0 ]; then
   multi_region=$(echo "$result" | jq '[.trailList[] | select(.IsMultiRegionTrail == true)] | length')
@@ -204,14 +255,16 @@ else
 fi
 
 # CloudWatch Alarms
-result=$(aws cloudwatch describe-alarms --state-value OK --output json --query "MetricAlarms[].AlarmName" 2>&1 || echo '[]')
+log "Checking CloudWatch alarms..."
+result=$(run_aws "CloudWatch alarms" '[]' aws cloudwatch describe-alarms --state-value OK --output json --query "MetricAlarms[].AlarmName")
 alarm_count=$(echo "$result" | jq 'length')
 echo "| CloudWatch alarms | **${alarm_count} active** | CloudWatch | ${REGION} | \`aws cloudwatch describe-alarms\` | ${alarm_count} alarms in OK state |" >> "$OUT"
 
 # ── Business Continuity (A1.2-A1.3) ─────────────────────
 
 # Backup Plans
-result=$(aws backup list-backup-plans --output json 2>&1 || echo '{"BackupPlansList": []}')
+log "Checking backup plans..."
+result=$(run_aws "backup plans" '{"BackupPlansList": []}' aws backup list-backup-plans --output json)
 backup_count=$(echo "$result" | jq '.BackupPlansList | length')
 if [ "$backup_count" -gt 0 ]; then
   plan_names=$(echo "$result" | jq -r '[.BackupPlansList[].BackupPlanName] | join(", ")' | head -c 80)
@@ -224,4 +277,5 @@ fi
 echo "" >> "$OUT"
 echo "*Values extracted from live AWS infrastructure. These represent point-in-time configuration. Re-scan and verify before audit submission.*" >> "$OUT"
 
+log "COMPLETE: aws evidence written to $OUT"
 echo "OK: aws evidence written to $OUT"

@@ -4,17 +4,53 @@
 # Requires: gcloud CLI authenticated
 # Config:   gcp.config.json (co-located)
 # Safety:   READ-ONLY commands only (describe, list, get)
+# Usage:    bash gcp.sh [-v] [-t TIMEOUT]
 set -uo pipefail
 
-# ── CLI check ──────────────────────────────────────────
-if ! command -v gcloud &>/dev/null; then
-  echo "Skipping GCP (gcloud CLI not installed)"
-  exit 0
-fi
-if ! command -v jq &>/dev/null; then
-  echo "ERROR: jq is required but not installed. Install it with: apt-get install jq (Linux) or brew install jq (macOS)"
-  exit 1
-fi
+# ── Options ────────────────────────────────────────────
+VERBOSE=false
+CMD_TIMEOUT=30  # seconds per gcloud command
+
+while getopts "vt:" opt; do
+  case $opt in
+    v) VERBOSE=true ;;
+    t) CMD_TIMEOUT="$OPTARG" ;;
+    *) echo "Usage: $0 [-v] [-t TIMEOUT_SECS]"; exit 1 ;;
+  esac
+done
+
+log() {
+  if $VERBOSE; then
+    echo "[$(date -u '+%H:%M:%S')] $*" >&2
+  fi
+}
+
+# Run a gcloud command with timeout; on timeout, return fallback
+run_gcp() {
+  local description="$1"
+  shift
+  log "START: ${description} → $*"
+  local start_ts
+  start_ts=$(date +%s)
+  local result
+  result=$(timeout "${CMD_TIMEOUT}" "$@" 2>&1 </dev/null) || {
+    local rc=$?
+    local elapsed=$(( $(date +%s) - start_ts ))
+    if [ $rc -eq 124 ]; then
+      log "TIMEOUT after ${elapsed}s: ${description}"
+      echo '[]'
+      return 0
+    else
+      log "FAILED (rc=${rc}) after ${elapsed}s: ${description}"
+      log "  → ${result}"
+      echo '[]'
+      return 0
+    fi
+  }
+  local elapsed=$(( $(date +%s) - start_ts ))
+  log "DONE (${elapsed}s): ${description}"
+  echo "$result"
+}
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CONFIG="${SCRIPT_DIR}/$(basename "$0" .sh).config.json"
@@ -25,6 +61,11 @@ REGION=$(jq -r '.region // "us-central1"' "$CONFIG")
 if [ -z "$PROJECT" ]; then
   PROJECT=$(gcloud config get-value project 2>/dev/null || echo "")
 fi
+
+log "Config: ${CONFIG}"
+log "Project: ${PROJECT:-unknown}"
+log "Region: ${REGION}"
+log "Command timeout: ${CMD_TIMEOUT}s"
 
 OUT="${COMPLIANCE_EVIDENCE_DIR:-.compliance/evidence/cloud}/gcp-evidence.md"
 mkdir -p "$(dirname "$OUT")"
@@ -41,6 +82,7 @@ mkdir -p "$(dirname "$OUT")"
 } > "$OUT"
 
 # ── Verify Authentication ───────────────────────────────
+log "Verifying GCP authentication..."
 active_account=$(gcloud auth list --filter=status:ACTIVE --format="value(account)" 2>&1 || echo "")
 if [ -n "$active_account" ]; then
   echo "| GCP Account | **${active_account}** | Auth | global | \`gcloud auth list\` | Authenticated successfully |" >> "$OUT"
@@ -65,7 +107,8 @@ echo "| GCP Project | **${PROJECT}** | Config | global | \`gcloud config get-val
 # ── Access Control (CC6.1-6.3) ──────────────────────────
 
 # Project IAM Policy
-result=$(gcloud projects get-iam-policy "$PROJECT" --format=json 2>&1 || echo '{"error": true}')
+log "Checking project IAM policy..."
+result=$(run_gcp "IAM policy" gcloud projects get-iam-policy "$PROJECT" --format=json)
 if echo "$result" | jq -e '.bindings' > /dev/null 2>&1; then
   role_count=$(echo "$result" | jq '[.bindings[].role] | unique | length')
   member_count=$(echo "$result" | jq '[.bindings[].members[]] | unique | length')
@@ -81,14 +124,15 @@ fi
 # ── Data Management (CC6.5-6.7) ─────────────────────────
 
 # Cloud SQL Instances
-result=$(gcloud sql instances list --format=json 2>&1 || echo '[]')
+log "Checking Cloud SQL instances..."
+result=$(run_gcp "Cloud SQL instances" gcloud sql instances list --format=json)
 db_count=$(echo "$result" | jq 'length' 2>/dev/null || echo "0")
 if [ "$db_count" -gt 0 ]; then
   for i in $(seq 0 $((db_count - 1))); do
     name=$(echo "$result" | jq -r ".[$i].name")
     version=$(echo "$result" | jq -r ".[$i].databaseVersion")
     # Get detailed info
-    detail=$(gcloud sql instances describe "$name" --format=json 2>&1 || echo '{}')
+    detail=$(run_gcp "Cloud SQL ${name}" gcloud sql instances describe "$name" --format=json)
     backup_enabled=$(echo "$detail" | jq -r '.settings.backupConfiguration.enabled // false')
     ssl_required=$(echo "$detail" | jq -r '.settings.ipConfiguration.requireSsl // false')
     pitr=$(echo "$detail" | jq -r '.settings.backupConfiguration.binaryLogEnabled // .settings.backupConfiguration.pointInTimeRecoveryEnabled // false')
@@ -99,14 +143,15 @@ else
 fi
 
 # KMS Keyrings & Keys
-keyrings=$(gcloud kms keyrings list --location="$REGION" --format=json 2>&1 || echo '[]')
+log "Checking KMS keyrings..."
+keyrings=$(run_gcp "KMS keyrings" gcloud kms keyrings list --location="$REGION" --format=json)
 keyring_count=$(echo "$keyrings" | jq 'length' 2>/dev/null || echo "0")
 if [ "$keyring_count" -gt 0 ]; then
   total_keys=0
   rotation_count=0
   for kr in $(echo "$keyrings" | jq -r '.[].name' | head -5); do
     kr_short=$(basename "$kr")
-    keys=$(gcloud kms keys list --keyring="$kr_short" --location="$REGION" --format=json 2>&1 || echo '[]')
+    keys=$(run_gcp "KMS keys ${kr_short}" gcloud kms keys list --keyring="$kr_short" --location="$REGION" --format=json)
     key_count=$(echo "$keys" | jq 'length' 2>/dev/null || echo "0")
     total_keys=$((total_keys + key_count))
     rotating=$(echo "$keys" | jq '[.[] | select(.rotationPeriod != null)] | length' 2>/dev/null || echo "0")
@@ -118,7 +163,8 @@ else
 fi
 
 # Cloud Storage Buckets
-buckets=$(gcloud storage buckets list --format=json 2>&1 || echo '[]')
+log "Checking Cloud Storage buckets..."
+buckets=$(run_gcp "Cloud Storage buckets" gcloud storage buckets list --format=json)
 bucket_count=$(echo "$buckets" | jq 'length' 2>/dev/null || echo "0")
 if [ "$bucket_count" -gt 0 ]; then
   versioned=$(echo "$buckets" | jq '[.[] | select(.versioning.enabled == true)] | length' 2>/dev/null || echo "0")
@@ -131,7 +177,8 @@ fi
 # ── Network Security (CC6.6-6.7) ────────────────────────
 
 # SSL Policies
-ssl_policies=$(gcloud compute ssl-policies list --format=json 2>&1 || echo '[]')
+log "Checking SSL policies..."
+ssl_policies=$(run_gcp "SSL policies" gcloud compute ssl-policies list --format=json)
 ssl_count=$(echo "$ssl_policies" | jq 'length' 2>/dev/null || echo "0")
 if [ "$ssl_count" -gt 0 ]; then
   for i in $(seq 0 $((ssl_count - 1))); do
@@ -145,7 +192,8 @@ else
 fi
 
 # Firewall Rules
-firewalls=$(gcloud compute firewall-rules list --format=json 2>&1 || echo '[]')
+log "Checking firewall rules..."
+firewalls=$(run_gcp "firewall rules" gcloud compute firewall-rules list --format=json)
 fw_count=$(echo "$firewalls" | jq 'length' 2>/dev/null || echo "0")
 if [ "$fw_count" -gt 0 ]; then
   open_ssh=$(echo "$firewalls" | jq '[.[] | select(.allowed != null) | select(.sourceRanges != null) | select(.sourceRanges[] == "0.0.0.0/0") | select(.allowed[].ports != null) | select(.allowed[].ports[] == "22")] | length' 2>/dev/null || echo "0")
@@ -155,14 +203,16 @@ else
 fi
 
 # Cloud Armor (WAF)
-armor=$(gcloud compute security-policies list --format=json 2>&1 || echo '[]')
+log "Checking Cloud Armor..."
+armor=$(run_gcp "Cloud Armor policies" gcloud compute security-policies list --format=json)
 armor_count=$(echo "$armor" | jq 'length' 2>/dev/null || echo "0")
 echo "| Cloud Armor | **${armor_count} security policies** | Compute | global | \`gcloud compute security-policies list\` | WAF policies |" >> "$OUT"
 
 # ── Vulnerability & Monitoring (CC7.1-7.2) ───────────────
 
 # Enabled Security Services
-sec_services=$(gcloud services list --enabled --filter="name:(containeranalysis OR securitycenter OR binaryauthorization)" --format=json 2>&1 || echo '[]')
+log "Checking security services..."
+sec_services=$(run_gcp "security services" gcloud services list --enabled --filter="name:(containeranalysis OR securitycenter OR binaryauthorization)" --format=json)
 sec_count=$(echo "$sec_services" | jq 'length' 2>/dev/null || echo "0")
 if [ "$sec_count" -gt 0 ]; then
   svc_names=$(echo "$sec_services" | jq -r '[.[].config.name // .[].name] | join(", ")' 2>/dev/null | head -c 100)
@@ -172,7 +222,8 @@ else
 fi
 
 # Log Sinks
-sinks=$(gcloud logging sinks list --format=json 2>&1 || echo '[]')
+log "Checking log sinks..."
+sinks=$(run_gcp "log sinks" gcloud logging sinks list --format=json)
 sink_count=$(echo "$sinks" | jq 'length' 2>/dev/null || echo "0")
 if [ "$sink_count" -gt 0 ]; then
   destinations=$(echo "$sinks" | jq -r '[.[].destination] | join(", ")' 2>/dev/null | head -c 120)
@@ -182,12 +233,14 @@ else
 fi
 
 # Alerting Policies
-alerts=$(gcloud monitoring policies list --format=json 2>&1 || echo '[]')
+log "Checking alerting policies..."
+alerts=$(run_gcp "alerting policies" gcloud alpha monitoring policies list --format=json)
 alert_count=$(echo "$alerts" | jq 'length' 2>/dev/null || echo "0")
-echo "| Alerting policies | **${alert_count} policies** | Monitoring | global | \`gcloud monitoring policies list\` | Monitoring alerts |" >> "$OUT"
+echo "| Alerting policies | **${alert_count} policies** | Monitoring | global | \`gcloud alpha monitoring policies list\` | Monitoring alerts |" >> "$OUT"
 
 # ── Footer ──────────────────────────────────────────────
 echo "" >> "$OUT"
 echo "*Values extracted from live GCP infrastructure. These represent point-in-time configuration. Re-scan and verify before audit submission.*" >> "$OUT"
 
+log "COMPLETE: gcp evidence written to $OUT"
 echo "OK: gcp evidence written to $OUT"
