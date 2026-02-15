@@ -47,6 +47,9 @@ When generating a policy, look up the policy ID in the relevant framework file(s
 **Questions to Ask:**
 1. Do you have a dedicated security role (CISO, Security Lead)?
    - Options: Yes, full-time CISO/CSO | Yes, part-time security lead | No, shared responsibility
+   - **If "No, shared responsibility" AND company_size is "1-10":** Ask follow-up: "Do you have an external advisor, fractional CISO, or advisory board? (Even informal arrangements count — this helps auditors see independent oversight.)"
+     - If yes: capture arrangement details for the policy (vCISO/advisor name, frequency of engagement). Reference [small-team-controls.md](small-team-controls.md) "Dedicated Security Personnel" section.
+     - If no: suggest considering a vCISO arrangement or at minimum documenting a responsibility matrix showing who owns each security area.
 2. Are security responsibilities documented in job descriptions?
    - Options: Yes, all roles | Yes, security roles only | No
 3. Do you maintain an organizational chart?
@@ -140,6 +143,7 @@ When generating a policy, look up the policy ID in the relevant framework file(s
 **Questions to Ask:**
 1. Do you have a designated incident response team?
    - Options: Yes, dedicated team | Yes, shared responsibilities | No formal team
+   - **If "No formal team" AND company_size is "1-10":** Suggest compensating controls: "For small teams, auditors accept a documented escalation path (who to contact for what severity) plus an external incident response retainer. Do you have either of these?" Reference [small-team-controls.md](small-team-controls.md). When generating the policy, frame the IR approach around documented escalation procedures and external support rather than a dedicated team structure.
 2. What tools do you use for incident detection?
    - Options: SIEM | Log aggregation | Cloud-native monitoring | Manual review
 3. How are incidents communicated internally?
@@ -268,11 +272,14 @@ When generating a policy, look up the policy ID in the relevant framework file(s
 **Questions to Ask:**
 1. Do you require code review before merge?
    - Options: Yes, all changes | Most changes | Only for production | No
-2. Do you have a staging environment?
+2. Are you the sole developer, or do you have a small team without independent reviewers?
+   - Options: Yes, sole developer | Small team (2-3) without dedicated reviewers | No, we have independent reviewers
+   - **If "sole developer" or "small team without dedicated reviewers":** Reference [small-team-controls.md](small-team-controls.md) "Change Management" section. When generating the policy, incorporate CI/CD-as-reviewer patterns: mandatory automated checks (tests, linting, security scans) as the independent verification layer, plus post-deployment verification checklists. If available, suggest outsourced code review for security-sensitive changes.
+3. Do you have a staging environment?
    - Options: Yes | No | Partial
-3. How are production deployments approved?
+4. How are production deployments approved?
    - Options: PR approval | Change board | Self-approval | No formal process
-4. Do you maintain a change log?
+5. Do you maintain a change log?
    - Options: Yes, automated | Yes, manual | No
 
 **Template Hints:**
