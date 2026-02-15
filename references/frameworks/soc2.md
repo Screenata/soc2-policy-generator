@@ -1,6 +1,6 @@
 # SOC 2 Trust Services Criteria — Control Mappings & Matching Reference
 
-This file maps each policy to its relevant SOC 2 Trust Services Criteria (TSC) and provides criteria summaries with key matching topics for semantic matching in Step 8 (External Document Response).
+This file maps each policy to its relevant SOC 2 Trust Services Criteria (TSC) and provides criteria summaries with key matching topics for semantic matching in the External Document Response workflow ([workflow-responses.md](../workflow-responses.md)).
 
 Source: Based on AICPA 2017 Trust Services Criteria (TSP Section 100), with March 2020 updates.
 
@@ -11,7 +11,7 @@ Source: Based on AICPA 2017 Trust Services Criteria (TSP Section 100), with Marc
 2. Include all listed TSC codes in the policy's `satisfies.TSC` frontmatter
 3. Reference the criteria descriptions in the policy body where appropriate
 
-**For control matrix mapping (Step 8):**
+**For control matrix mapping (External Document Response workflow):**
 1. Use the "Criteria Reference" section to match auditor descriptions to TSC codes
 2. Each criterion has a summary and key matching topics for semantic matching
 3. Match auditor test descriptions against the key topics to find the right TSC code
@@ -179,7 +179,7 @@ Source: Based on AICPA 2017 Trust Services Criteria (TSP Section 100), with Marc
 
 ## Criteria Reference — Summaries & Matching Topics
 
-Each criterion below includes a summary and key matching topics for semantic matching in Step 8 (External Document Response). Use these to match auditor control descriptions to the correct TSC codes when explicit codes are not provided.
+Each criterion below includes a summary and key matching topics for semantic matching in the External Document Response workflow ([workflow-responses.md](../workflow-responses.md)). Use these to match auditor control descriptions to the correct TSC codes when explicit codes are not provided.
 
 ### CC1 — Control Environment
 

@@ -51,11 +51,11 @@ For each tool/provider selected, create a task file `.compliance/tasks/auto-{too
 Pre-built scripts for 26 common tools (23 SaaS + 3 cloud providers) are available in `assets/scripts/`. Use the **copy-first** approach — fall back to generating on demand only when needed.
 
 **For each SaaS tool** (skip steps that are already complete):
-1. **If `.compliance/scripts/{tool}.sh` already exists**, skip to step 4. Otherwise: **if pre-built script exists** in `assets/scripts/{tool}.sh`, copy it to `.compliance/scripts/{tool}.sh`. **If no pre-built script**, generate one using API patterns from `references/saas-integrations/{category}.md`.
+1. **If `.compliance/scripts/{tool}.sh` already exists**, skip to step 3. Otherwise: **if pre-built script exists** in `assets/scripts/{tool}.sh`, copy it to `.compliance/scripts/{tool}.sh`. **If no pre-built script**, generate one using API patterns from `references/saas-integrations/{category}.md`.
 2. **Update `.compliance/status.md`** — mark `[x] Script` for this tool in the "SaaS Tool Configuration" table.
-3. **If `.compliance/scripts/{tool}.config.json` already exists**, skip to step 6. Otherwise: ask the user for non-secret config values (domain, project key, etc.) and write to `.compliance/scripts/{tool}.config.json`.
+3. **If `.compliance/scripts/{tool}.config.json` already exists**, skip to step 5. Otherwise: ask the user for non-secret config values (domain, project key, etc.) and write to `.compliance/scripts/{tool}.config.json`.
 4. **Update `.compliance/status.md`** — mark `[x] Config` for this tool.
-5. **Check `.compliance/secrets.env`** for the required token (e.g., `OKTA_API_TOKEN`). If already present, skip to step 7. Otherwise: ask the user to add the required API token to `.compliance/secrets.env`: `{TOOL}_API_TOKEN=your-token-here`
+5. **Check `.compliance/secrets.env`** for the required token (e.g., `OKTA_API_TOKEN`). If already present, skip to step 6. Otherwise: ask the user to add the required API token to `.compliance/secrets.env`: `{TOOL}_API_TOKEN=your-token-here`
 6. Source secrets and test: `set -a; source .compliance/secrets.env; set +a && bash .compliance/scripts/{tool}.sh`
 7. Read the output evidence file and verify it looks correct
 8. If there are errors (API changed, missing fields), fix the script and rerun — this is the **generate fallback**

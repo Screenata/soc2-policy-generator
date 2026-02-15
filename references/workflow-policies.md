@@ -60,6 +60,14 @@ Field mapping: Q1 → `org_name`, Q2 → `company_description`, Q3 → `industry
 > 3. 51-200
 > 4. 200+
 
+**Small-team context** (after Q4, if answer is "1-10"):
+
+Load [small-team-controls.md](small-team-controls.md) as context for the rest of the session. Before asking Q5, briefly reassure the user:
+
+> For teams your size, I'll suggest compensating controls where standard controls require multiple people. These are well-accepted by auditors — SOC 2 is risk-based, not headcount-based.
+
+When generating policies that involve segregation of duties, board oversight, dedicated security roles, or independent review, incorporate the relevant compensating control patterns from `small-team-controls.md` into both the Q&A guidance and the generated policy text.
+
 **Question 5** (ask after Q4 answered):
 > Who are your C-Suite executives? (names and titles, e.g. "Jane Doe — CEO, John Smith — CTO")
 
@@ -242,6 +250,11 @@ Also create `.compliance/status.md` with empty progress tables (filled in later 
 
 | Tool | Script | Config | Tested | Workflow |
 |------|--------|--------|--------|----------|
+
+## Cloud Provider Configuration
+
+| Provider | Script | Config | Tested | Workflow |
+|----------|--------|--------|--------|----------|
 
 ## Workflows Generated
 
